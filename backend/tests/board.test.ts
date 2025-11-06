@@ -4,7 +4,7 @@
 
 import assert from 'node:assert';
 import fs from 'node:fs';
-import { Board } from '../src/board.js';
+import { Board } from '../../src/board';
 
 
 /**
