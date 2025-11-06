@@ -556,3 +556,34 @@ class Board:
             lines.append(row_str)
 
         return "\n".join(lines)
+
+    async def wait_for_flip(self, x: int, y: int, player_id: str) -> str:
+        """
+        Async flip that waits if another player controls the card.
+
+        BLOCKING: May yield control if another player has card
+        PRECONDITION: 0 <= x < width, 0 <= y < height
+        POSTCONDITION: card at (x, y) is flipped and controlled by player_id
+
+        Returns: the card value at (x, y)
+        """
+        import asyncio
+
+        # Create lock if it doesn't exist
+        if not hasattr(self, '_flip_lock'):
+            self._flip_lock = asyncio.Lock()
+
+        async with self._flip_lock:
+            space = self.get_space(x, y)
+
+            # If controlled by another player, wait briefly
+            if space.is_face_up and space.controlled_by and space.controlled_by != player_id:
+                print(f"⏳ {player_id} waiting for {space.controlled_by}'s card at ({x},{y})")
+                await asyncio.sleep(0.01)  # Yield control
+
+            # Now flip the card
+            self.flip_card(x, y)
+            self.set_control(x, y, player_id)
+            print(f"✅ {player_id} flipped {space.card} at ({x},{y})")
+
+            return space.card

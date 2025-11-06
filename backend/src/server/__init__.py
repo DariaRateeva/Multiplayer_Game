@@ -1,8 +1,11 @@
 """
-HTTP server for Memory Scramble game.
+HTTP server for Memory Scramble with async support for concurrent players.
 
-Serves REST API endpoints and the game UI.
-Implements MIT spec endpoints for the web interface.
+Implements MIT spec endpoints:
+- POST /games/new - create new game
+- GET /look/{player_id} - get board state
+- GET /watch/{player_id} - long-polling
+- POST /flip/{player_id}?x=0&y=0 - flip card
 """
 
 from fastapi import FastAPI, HTTPException
@@ -10,11 +13,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pathlib import Path
 from typing import Dict, Optional
+import asyncio
 
 from src.game.board import Board
 from src.commands.commands import GameManager
 
-app = FastAPI(title="Memory Scramble Game")
+app = FastAPI(title="Memory Scramble Game (Async)")
 
 # Enable CORS for web browser
 app.add_middleware(
@@ -42,24 +46,25 @@ async def serve_index():
     else:
         return {
             "error": "index.html not found",
-            "looking_at": str(html_path),
-            "try": "http://localhost:8080/docs for API documentation"
+            "looking_at": str(html_path)
         }
 
 
 # ==================== MIT SPEC ENDPOINTS ====================
-# These match what the provided index.html expects
 
 @app.post("/games/new")
 async def games_new_post(spec: str = "random") -> Dict:
-    """Create a new game."""
+    """
+    Create a new game.
+
+    POSTCONDITION: game_manager initialized with new Board
+    """
     global game_manager
     try:
-        # 4x4 = 16 spaces = 8 pairs with emoji cards
         cards = {"🦄", "🌈", "🎨", "⭐", "🎪", "🎭", "🎬", "🎸"}
         board = Board(4, 4, cards)
         game_manager = GameManager(board)
-        print(f"✅ Game created: {board.width}x{board.height} with emojis")
+        print(f"✅ Game created: {board.width}x{board.height}")
         return {"ok": True}
     except Exception as e:
         print(f"❌ Error creating game: {e}")
@@ -70,7 +75,11 @@ async def games_new_post(spec: str = "random") -> Dict:
 
 @app.get("/look/{player_id}")
 async def look_mit(player_id: str) -> Dict:
-    """Get current board state."""
+    """
+    Get current board state (non-blocking).
+
+    POSTCONDITION: returns board with all card states
+    """
     global game_manager
 
     if game_manager is None:
@@ -80,18 +89,20 @@ async def look_mit(player_id: str) -> Dict:
             game_manager = GameManager(board)
             print(f"✅ Auto-created game for {player_id}")
         except Exception as e:
-            print(f"❌ Error auto-creating game: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ Error: {e}")
             raise HTTPException(status_code=400, detail="No active game")
 
-    result = game_manager.look(player_id)
+    result = await game_manager.look(player_id)
     return result
 
 
 @app.get("/watch/{player_id}")
 async def watch_mit(player_id: str) -> Dict:
-    """Watch for board changes (long-polling)."""
+    """
+    Watch for board changes (long-polling).
+
+    POSTCONDITION: returns current board state
+    """
     global game_manager
 
     if game_manager is None:
@@ -101,71 +112,31 @@ async def watch_mit(player_id: str) -> Dict:
             game_manager = GameManager(board)
             print(f"✅ Auto-created game for watch by {player_id}")
         except Exception as e:
-            print(f"❌ Error in watch: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ Error: {e}")
             raise HTTPException(status_code=400, detail="No active game")
 
-    result = game_manager.look(player_id)
+    result = await game_manager.look(player_id)
     return result
 
 
 @app.post("/flip/{player_id}")
 async def flip_mit(player_id: str, x: int, y: int) -> Dict:
-    """Flip a card on the board."""
+    """
+    Flip a card on the board (async - may wait for other players).
+
+    PRECONDITION: 0 <= x < 4, 0 <= y < 4
+    POSTCONDITION: card is flipped and controlled by player
+    """
     global game_manager
 
     if game_manager is None:
         print(f"❌ Flip failed: No active game")
-        raise HTTPException(status_code=400, detail="No active game. Call /games/new first")
+        raise HTTPException(status_code=400, detail="No active game")
 
     print(f"📍 Flip request: {player_id} at ({x}, {y})")
-    result = game_manager.flip(player_id, x, y)
-    print(f"📊 Flip result: {result['ok']} - {result['message']}")
+    result = await game_manager.flip(player_id, x, y)
+    print(f"📊 Result: {result}")
     return result
-
-
-# ==================== CUSTOM API ENDPOINTS ====================
-# Keep for backwards compatibility
-
-@app.post("/api/games/new")
-async def create_game(width: int = 3, height: int = 3) -> Dict:
-    """Create a new game with specified dimensions."""
-    global game_manager
-
-    try:
-        assert width > 0 and height > 0, "Width and height must be positive"
-        assert (width * height) % 2 == 0, "Total spaces must be even"
-
-        num_pairs = (width * height) // 2
-        cards = {f"Card{i}" for i in range(num_pairs)}
-
-        board = Board(width, height, cards)
-        game_manager = GameManager(board)
-
-        return {"ok": True, "message": "Game created", "width": width, "height": height}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.get("/api/games/look")
-async def look_custom(player_id: str) -> Dict:
-    """Get current board state (custom API)."""
-    global game_manager
-
-    if game_manager is None:
-        raise HTTPException(status_code=400, detail="No active game")
-    return game_manager.look(player_id)
-
-
-@app.post("/api/games/flip")
-async def flip_custom(player_id: str, x: int, y: int) -> Dict:
-    """Flip a card (custom API)."""
-    global game_manager
-
-    if game_manager is None:
-        raise HTTPException(status_code=400, detail="No active game")
-    return game_manager.flip(player_id, x, y)
 
 
 # ==================== HEALTH CHECK ====================
@@ -180,8 +151,8 @@ async def health() -> Dict:
 async def api_info() -> Dict:
     """API information endpoint."""
     return {
-        "name": "Memory Scramble Game",
-        "version": "1.0",
+        "name": "Memory Scramble Game (Async)",
+        "version": "2.0",
         "endpoints": {
             "games_new": "POST /games/new",
             "look": "GET /look/{player_id}",
@@ -189,3 +160,20 @@ async def api_info() -> Dict:
             "flip": "POST /flip/{player_id}?x=0&y=0"
         }
     }
+
+
+@app.post("/reset/{player_id}")
+async def reset_cards(player_id: str, x1: int, y1: int, x2: int, y2: int) -> Dict:
+    """Reset two mismatched cards back to face-down."""
+    global game_manager
+    if game_manager is None:
+        raise HTTPException(status_code=400, detail="No active game")
+
+    try:
+        game_manager.board.flip_card(x1, y1)
+        game_manager.board.flip_card(x2, y2)
+        game_manager.board.set_control(x1, y1, None)
+        game_manager.board.set_control(x2, y2, None)
+        return {"ok": True, "message": "Cards reset"}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
