@@ -17,6 +17,9 @@ Representation Invariants:
 from typing import Set, List, Optional, Tuple
 from .space import Space
 import random
+import asyncio
+from typing import Dict, Any, Callable, Optional, Set
+
 
 
 class Board:
@@ -587,3 +590,62 @@ class Board:
             print(f"✅ {player_id} flipped {space.card} at ({x},{y})")
 
             return space.card
+
+    async def map_cards(self, player_id: str, transformer) -> Dict[str, Any]:
+        """
+        Apply an async transformer function to every card on the board.
+
+        REQUIREMENT: Pairwise consistency - if two cards match at start,
+        they must remain matching even if map() is partially done.
+
+        PRECONDITION: transformer is async function: card -> new_card
+        POSTCONDITION: all cards transformed, face-up/control state unchanged
+
+        Returns: board state after transformation
+        """
+        # Use a separate lock for map to allow other operations
+        if not hasattr(self, '_map_lock'):
+            self._map_lock = asyncio.Lock()
+
+        async with self._map_lock:
+            # Iterate through all positions and transform cards
+            for y in range(self.height):
+                for x in range(self.width):
+                    try:
+                        space = self.get_space(x, y)
+                        if space.card is not None:
+                            # Apply transformer - might be slow (API call, etc)
+                            new_card = await transformer(space.card)
+                            # Use object.__setattr__ to bypass immutability
+                            object.__setattr__(space, 'card', new_card)
+
+                        # Yield control to allow other operations
+                        await asyncio.sleep(0)
+                    except Exception as e:
+                        print(f"❌ Transform error at ({x},{y}): {e}")
+                        raise
+
+            self.check_rep()
+
+            # Build board state manually
+            board_grid = []
+            for y in range(self.height):
+                row = []
+                for x in range(self.width):
+                    space = self.get_space(x, y)
+                    row.append({
+                        "card": space.card,
+                        "is_face_up": space.is_face_up,
+                        "controlled_by": space.controlled_by
+                    })
+                board_grid.append(row)
+
+            return {
+                "board": board_grid,
+                "width": self.width,
+                "height": self.height,
+                "ok": True
+            }
+
+
+

@@ -177,3 +177,59 @@ async def reset_cards(player_id: str, x1: int, y1: int, x2: int, y2: int) -> Dic
         return {"ok": True, "message": "Cards reset"}
     except Exception as e:
         return {"ok": False, "message": str(e)}
+
+    @app.post("/map/{player_id}")
+    async def map_endpoint(player_id: str, transformer_type: str = "emoji") -> Dict:
+        """
+        Apply a transformer to all cards.
+
+        Query param: transformer_type=emoji|uppercase|reverse
+        """
+        global game_manager
+        if game_manager is None:
+            raise HTTPException(status_code=400, detail="No active game")
+
+        # Define some example transformers
+        transformers = {
+            "emoji": emoji_transformer,
+            "uppercase": uppercase_transformer,
+            "reverse": reverse_transformer,
+        }
+
+        transformer = transformers.get(transformer_type)
+        if not transformer:
+            raise HTTPException(status_code=400, detail=f"Unknown transformer: {transformer_type}")
+
+        try:
+            result = await game_manager.map_game(player_id, transformer)
+            return result
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Example async transformers
+    async def emoji_transformer(card: str) -> str:
+        """Transform emoji to emoji (for testing)."""
+        emoji_map = {
+            "🦄": "🌈",
+            "🌈": "🦄",
+            "🎨": "🎭",
+            "🎭": "🎨",
+            "⭐": "🎪",
+            "🎪": "⭐",
+            "🎬": "🎸",
+            "🎸": "🎬",
+        }
+        # Simulate async operation (e.g., API call)
+        await asyncio.sleep(0.01)
+        return emoji_map.get(card, card)
+
+    async def uppercase_transformer(card: str) -> str:
+        """Transform to uppercase (for string cards)."""
+        await asyncio.sleep(0.01)
+        return card.upper()
+
+    async def reverse_transformer(card: str) -> str:
+        """Reverse the card string."""
+        await asyncio.sleep(0.01)
+        return card[::-1]
+

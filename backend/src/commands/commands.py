@@ -196,3 +196,20 @@ class GameManager:
             import traceback
             traceback.print_exc()
             return []
+
+    async def map_game(self, player_id: str, transformer: callable) -> Dict[str, Any]:
+        """
+        Apply a transformation function to all cards on the board.
+
+        PRECONDITION: transformer is async function mapping card to card
+        POSTCONDITION: board transformed, game state unchanged
+
+        Returns: board state with all cards transformed
+        """
+        try:
+            result = await self.board.map_cards(player_id, transformer)
+            print(f"✅ Map completed for {player_id}")
+            return result
+        except Exception as e:
+            print(f"❌ Map error: {e}")
+            return {"ok": False, "error": str(e)}
