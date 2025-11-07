@@ -76,6 +76,7 @@ class GameManager:
             - ok: success flag
             - message: status message
             - card: flipped card value (if successful)
+            - board: current board state
         """
         try:
             # Validate bounds
@@ -98,24 +99,33 @@ class GameManager:
             # Store card value BEFORE flipping
             card_value = space.card
 
-            # Flip the card and take control (may wait for async)
-            if hasattr(self.board, 'wait_for_flip'):
-                # Async version available
-                await self.board.wait_for_flip(x, y, player_id)
-            else:
-                # Fallback to sync version
+            # Check if card is already face-up and controlled by another player
+            if space.is_face_up and space.controlled_by and space.controlled_by != player_id:
+                return {
+                    "ok": False,
+                    "message": f"Card at ({x}, {y}) is already controlled by {space.controlled_by}",
+                    "board": self._serialize_board()
+                }
+
+            # Flip the card if it's face-down
+            if not space.is_face_up:
                 self.board.flip_card(x, y)
-                self.board.set_control(x, y, player_id)
+
+            # Take control
+            self.board.set_control(x, y, player_id)
 
             # Track pending cards for this player
             if player_id not in self.pending_cards:
                 self.pending_cards[player_id] = []
             self.pending_cards[player_id].append((x, y, card_value))
 
+            print(f"✅ {player_id} flipped {card_value} at ({x},{y})")
+
             return {
                 "ok": True,
                 "message": f"Flipped {card_value} at ({x}, {y})",
-                "card": card_value
+                "card": card_value,
+                "board": self._serialize_board()  # ADD board state
             }
 
         except Exception as e:

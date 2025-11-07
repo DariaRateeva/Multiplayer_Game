@@ -580,18 +580,31 @@ class Board:
             self._flip_lock = asyncio.Lock()
 
         async with self._flip_lock:
-            space = self.get_space(x, y)
+            # Wait until card becomes available
+            while True:
+                space = self.get_space(x, y)
 
-            # If controlled by another player, wait briefly
-            if space.is_face_up and space.controlled_by and space.controlled_by != player_id:
+                # Card is available if:
+                # - Not controlled by anyone, OR
+                # - Controlled by current player
+                if not space.controlled_by or space.controlled_by == player_id:
+                    break  # Card available!
+
+                # Card controlled by another player - wait
                 print(f"⏳ {player_id} waiting for {space.controlled_by}'s card at ({x},{y})")
-                await asyncio.sleep(0.01)  # Yield control
+                await asyncio.sleep(0.01)  # Yield control and retry
 
-            # Now flip the card
-            self.flip_card(x, y)
+            # Now we have exclusive access to the card
+            space = self.get_space(x, y)  # Refresh space
+
+            # If card is face-down, flip it face-up
+            if not space.is_face_up:
+                self.flip_card(x, y)
+
+            # Take control
             self.set_control(x, y, player_id)
-            print(f"✅ {player_id} flipped {space.card} at ({x},{y})")
 
+            print(f"✅ {player_id} flipped {space.card} at ({x},{y})")
             return space.card
 
     async def map_cards(self, player_id: str, transformer) -> Dict[str, Any]:

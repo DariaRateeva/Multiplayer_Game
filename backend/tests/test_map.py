@@ -1,6 +1,7 @@
 """Test the map() function for concurrent transformation."""
 
 import asyncio
+import pytest
 import sys
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from src.game.board import Board
 from src.commands.commands import GameManager
 
 
+@pytest.mark.asyncio
 async def test_map_basic():
     """Test basic map transformation with valid card pairs."""
     cards = {"A", "B", "C", "D", "E", "F", "G", "H"}
@@ -42,6 +44,7 @@ async def test_map_basic():
     print("✅ test_map_basic PASSED")
 
 
+@pytest.mark.asyncio
 async def test_map_identity():
     """Test that identity transformation leaves board unchanged."""
     cards = {"🦄", "🌈", "🎨", "⭐", "🎪", "🎭", "🎬", "🎸"}
@@ -77,6 +80,7 @@ async def test_map_identity():
     print("✅ test_map_identity PASSED")
 
 
+@pytest.mark.asyncio
 async def test_map_emoji_transform():
     """Test map with emoji transformation."""
     cards = {"🦄", "🌈", "🎨", "⭐", "🎪", "🎭", "🎬", "🎸"}
@@ -114,10 +118,10 @@ async def test_map_emoji_transform():
     # All transformed cards should be in the emoji_map values
     expected_cards = set(emoji_map.values())
     assert transformed == expected_cards, f"Transformed cards {transformed} don't match expected {expected_cards}"
-
     print("✅ test_map_emoji_transform PASSED")
 
 
+@pytest.mark.asyncio
 async def test_map_concurrent_maps():
     """Test that two map() operations can run concurrently."""
     cards = {"A", "B", "C", "D", "E", "F", "G", "H"}
@@ -144,13 +148,11 @@ async def test_map_concurrent_maps():
 
     assert result1["ok"], "First map failed"
     assert result2["ok"], "Second map failed"
-
     print("✅ test_map_concurrent_maps PASSED")
 
 
 if __name__ == "__main__":
     print("\n🧪 Running map tests...\n")
-
     try:
         asyncio.run(test_map_basic())
         asyncio.run(test_map_identity())
