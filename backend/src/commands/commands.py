@@ -213,3 +213,20 @@ class GameManager:
         except Exception as e:
             print(f"❌ Map error: {e}")
             return {"ok": False, "error": str(e)}
+
+    async def watch(self, player_id: str) -> Dict[str, Any]:
+        """
+        Wait for the next board change.
+
+        PRECONDITION: player_id is valid string
+        POSTCONDITION: returns board state after change occurs
+
+        Returns: board state when change happens
+        """
+        try:
+            result = await self.board.wait_for_change()
+            print(f"🔔 Watcher {player_id} notified of change")
+            return result
+        except Exception as e:
+            print(f"❌ Watch error: {e}")
+            return {"ok": False, "error": str(e)}

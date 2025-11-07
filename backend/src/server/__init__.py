@@ -233,3 +233,19 @@ async def reset_cards(player_id: str, x1: int, y1: int, x2: int, y2: int) -> Dic
         await asyncio.sleep(0.01)
         return card[::-1]
 
+    @app.get("/watch/{player_id}")
+    async def watch_endpoint(player_id: str) -> Dict:
+        """
+        Wait for board to change, then return updated state.
+
+        This endpoint blocks until a change occurs.
+        """
+        global game_manager
+        if game_manager is None:
+            raise HTTPException(status_code=400, detail="No active game")
+
+        try:
+            result = await game_manager.watch(player_id)
+            return result
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))

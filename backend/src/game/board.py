@@ -68,7 +68,8 @@ class Board:
 
         self.width: int = width
         self.height: int = height
-
+        self._change_event = asyncio.Event()
+        self._watchers: List[asyncio.Event] = []
         # Create card list: each card appears exactly twice
         card_list: List[str] = []
         for card in cards:
@@ -308,6 +309,7 @@ class Board:
 
         self._grid[y][x] = new_space
         self.check_rep()
+        self._notify_watchers()
 
     def set_control(self, x: int, y: int, player_id: str) -> None:
         """
@@ -426,6 +428,7 @@ class Board:
         )
 
         self._grid[y][x] = new_space
+        self._notify_watchers()
         # NOTE: Do NOT call check_rep() here - let caller verify when ready
 
     @staticmethod
@@ -626,6 +629,7 @@ class Board:
                         raise
 
             self.check_rep()
+            self._notify_watchers()
 
             # Build board state manually
             board_grid = []
@@ -647,5 +651,74 @@ class Board:
                 "ok": True
             }
 
+    async def wait_for_change(self) -> Dict[str, Any]:
+        """
+        Wait for the next board change and return updated board state.
 
+        BLOCKING: This method blocks until ANY change occurs to the board:
+        - Cards turning face up or face down
+        - Cards being removed from the board
+        - Cards changing from one string to a different string
+
+        Non-changes that do NOT trigger notification:
+        - Control changes without face state change
+        - Failed operations (e.g., flipping empty space)
+
+        PRECONDITION: None (always safe to call)
+        POSTCONDITION: Returns board state after a change occurs
+
+        Returns:
+            dict with:
+            - board: 2D array of current board state
+            - width, height: board dimensions
+            - ok: success flag
+
+        Thread Safety:
+            Multiple watchers can wait concurrently.
+            All watchers are notified when ANY change occurs.
+        """
+        # Create a new event for this watcher
+        watcher_event = asyncio.Event()
+        self._watchers.append(watcher_event)
+
+        try:
+            # Wait until notified of a change
+            await watcher_event.wait()
+
+            # Return current board state
+            board_grid = []
+            for y in range(self.height):
+                row = []
+                for x in range(self.width):
+                    space = self.get_space(x, y)
+                    row.append({
+                        "card": space.card,
+                        "is_face_up": space.is_face_up,
+                        "controlled_by": space.controlled_by
+                    })
+                board_grid.append(row)
+
+            return {
+                "board": board_grid,
+                "width": self.width,
+                "height": self.height,
+                "ok": True
+            }
+        finally:
+            # Clean up this watcher
+            if watcher_event in self._watchers:
+                self._watchers.remove(watcher_event)
+
+    def _notify_watchers(self) -> None:
+        """
+        Notify all watchers that a change has occurred.
+
+        INTERNAL METHOD: Called by mutator methods after board changes.
+
+        PRECONDITION: Board has just changed
+        POSTCONDITION: All waiting watchers are notified
+        """
+        # Notify all waiting watchers
+        for watcher in self._watchers:
+            watcher.set()
 
