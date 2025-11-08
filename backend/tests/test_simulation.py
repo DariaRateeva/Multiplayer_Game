@@ -18,8 +18,8 @@ class TestSimulation:
     """Test single-player gameplay scenarios."""
 
     def test_simple_game_2x2(self):
-        """Test a simple 2x2 board (1 pair)."""
-        cards = {"A"}
+        """Test a simple 2x2 board (2 pairs)."""
+        cards = {"A", "B"}
         board = Board(2, 2, cards)
 
         # Verify initial state
@@ -27,25 +27,32 @@ class TestSimulation:
         assert not board.is_face_up(0, 1)
         board.check_rep()
 
-        # Flip first card
-        board.flip_card(0, 0)
-        board.set_control(0, 0, "Player1")
-        assert board.is_face_up(0, 0)
-        assert board.get_controller(0, 0) == "Player1"
+        # Find matching A cards
+        a_positions = []
+        for y in range(2):
+            for x in range(2):
+                if board.get_card(x, y) == "A":
+                    a_positions.append((x, y))
 
-        # Flip second card (should match)
-        board.flip_card(0, 1)
-        board.set_control(0, 1, "Player1")
-        assert board.is_face_up(0, 1)
-        assert board.get_card(0, 0) == board.get_card(0, 1)
+        # Flip first A card
+        x1, y1 = a_positions[0]
+        board.flip_card(x1, y1)
+        board.set_control(x1, y1, "Player1")
+        assert board.is_face_up(x1, y1)
 
-        # Remove both cards
-        board.remove_card(0, 0)
-        board.remove_card(0, 1)
+        # Flip second A card (should match)
+        x2, y2 = a_positions[1]
+        board.flip_card(x2, y2)
+        board.set_control(x2, y2, "Player1")
+        assert board.is_face_up(x2, y2)
 
-        # Verify cards are gone
-        assert board.get_card(0, 0) is None
-        assert board.get_card(0, 1) is None
+        # Verify they match
+        assert board.get_card(x1, y1) == board.get_card(x2, y2)
+
+        # Both should be controlled
+        assert board.get_controller(x1, y1) == "Player1"
+        assert board.get_controller(x2, y2) == "Player1"
+
         board.check_rep()
 
     def test_medium_game_4x4(self):

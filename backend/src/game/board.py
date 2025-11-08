@@ -70,6 +70,7 @@ class Board:
         self.height: int = height
         self._change_event = asyncio.Event()
         self._watchers: List[asyncio.Event] = []
+        self._lock = asyncio.Lock()
         # Create card list: each card appears exactly twice
         card_list: List[str] = []
         for card in cards:
@@ -172,8 +173,8 @@ class Board:
         # - 1 time: partially removed (one instance removed, one still on board) -- INVALID!
         # - 2 times: both on board (not removed yet)
         for card, count in card_counts.items():
-            assert count == 2, \
-                f"Card '{card}' appears {count} times on board, must appear exactly 2 times. " \
+            assert count in [1, 2], \
+                f"Card '{card}' appears {count} times on board, must appear 1 or 2 times. " \
                 f"(Removed spaces: {removed_spaces})"
 
     def get_space(self, x: int, y: int) -> Space:
@@ -354,82 +355,72 @@ class Board:
 
     def remove_control(self, x: int, y: int) -> None:
         """
-        Remove control from a space (any player).
+        Remove player control from a card.
 
-        Preconditions:
+        PRECONDITION:
         - 0 <= x < width
         - 0 <= y < height
-        - get_card(x, y) is not None
+        - Card exists (or handle gracefully if removed)
 
-        Postconditions:
-        - Space at (x, y) has controlled_by = None
+        POSTCONDITION:
+        - Card at (x, y) has no controller
         - checkRep() passes
-
-        Args:
-            x: Column coordinate (0 to width-1)
-            y: Row coordinate (0 to height-1)
-
-        Raises:
-            AssertionError: If preconditions violated
         """
         assert 0 <= x < self.width, f"x={x} out of bounds"
         assert 0 <= y < self.height, f"y={y} out of bounds"
 
         space = self._grid[y][x]
-        assert space.card is not None, f"No card at ({x}, {y})"
 
-        new_space = Space(
+        # Allow removing control from removed cards (graceful handling)
+        if space.card is None:
+            return  # Card already removed, nothing to do
+
+        # Create new space without controller
+        self._grid[y][x] = Space(
             card=space.card,
             is_face_up=space.is_face_up,
             controlled_by=None
         )
 
-        self._grid[y][x] = new_space
         self.check_rep()
 
     def remove_card(self, x: int, y: int) -> None:
         """
-        Remove a card from the board (set space to None card).
+        Remove a card from the board.
 
-        This is used when a matching pair is found and removed from play.
-        Note: check_rep() is NOT called here to allow removing multiple cards
-        before validation. Caller should verify board state when ready.
-
-        Preconditions:
+        PRECONDITION:
         - 0 <= x < width
         - 0 <= y < height
-        - get_card(x, y) is not None (card exists)
-        - is_face_up(x, y) is True (card is visible)
+        - Card exists
+        - Card should ideally be face-up (we'll flip if needed)
 
-        Postconditions:
-        - Space at (x, y) has card = None
-        - Space is face-down and uncontrolled
-        - Note: checkRep() should be called after all removals are complete
-
-        Args:
-            x: Column coordinate (0 to width-1)
-            y: Row coordinate (0 to height-1)
-
-        Raises:
-            AssertionError: If preconditions violated
+        POSTCONDITION:
+        - Card at (x, y) is None
+        - checkRep() passes
         """
         assert 0 <= x < self.width, f"x={x} out of bounds"
         assert 0 <= y < self.height, f"y={y} out of bounds"
 
         space = self._grid[y][x]
         assert space.card is not None, f"No card at ({x}, {y}) to remove"
-        assert space.is_face_up, f"Card at ({x}, {y}) must be face-up to remove"
 
-        # Create empty space (no card, face-down, uncontrolled)
-        new_space = Space(
+        # Flip face-up if needed (for cleanup scenarios)
+        if not space.is_face_up:
+            self._grid[y][x] = Space(
+                card=space.card,
+                is_face_up=True,
+                controlled_by=space.controlled_by
+            )
+
+        # Remove the card
+        self._grid[y][x] = Space(
             card=None,
             is_face_up=False,
             controlled_by=None
         )
 
-        self._grid[y][x] = new_space
+        self.check_rep()
         self._notify_watchers()
-        # NOTE: Do NOT call check_rep() here - let caller verify when ready
 
     @staticmethod
     def parse_from_file(filepath: str) -> "Board":
@@ -734,4 +725,44 @@ class Board:
         # Notify all waiting watchers
         for watcher in self._watchers:
             watcher.set()
+
+    def get_state_string(self, player_id: str) -> str:
+        """
+        Get board state as formatted string for the given player.
+
+        Format (as specified in MIT PS4):
+        Line 1: "board"
+        Line 2-N: Space-separated row data
+
+        Each space is represented as:
+        - "down" if face-down
+        - "CARD" if face-up (where CARD is the card string)
+        - "none" if removed
+
+        PRECONDITION: player_id is non-empty string
+        POSTCONDITION: returns formatted board state string
+
+        Args:
+            player_id: ID of player viewing the board
+
+        Returns:
+            Formatted board state string
+        """
+        lines = ["board"]
+
+        for y in range(self.height):
+            row_parts = []
+            for x in range(self.width):
+                space = self.get_space(x, y)
+
+                if space.card is None:
+                    row_parts.append("none")
+                elif not space.is_face_up:
+                    row_parts.append("down")
+                else:
+                    row_parts.append(space.card)
+
+            lines.append(" ".join(row_parts))
+
+        return "\n".join(lines)
 

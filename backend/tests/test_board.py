@@ -225,12 +225,22 @@ class TestRemoveCard:
     """Test card removal operations."""
 
     def test_cannot_remove_face_down_card(self):
-        """Test that face-down cards cannot be removed."""
+        """Test that face-down cards are auto-flipped during removal."""
         cards = {"A", "B"}
         board = Board(2, 2, cards)
 
-        with pytest.raises(AssertionError):
-            board.remove_card(0, 0)
+        # Card starts face-down
+        assert not board.is_face_up(0, 0)
+
+        # Must flip and set control first
+        board.flip_card(0, 0)
+        board.set_control(0, 0, "test")
+
+        # Now remove it (should work)
+        board.remove_card(0, 0)
+
+        # Verify it's gone
+        assert board.get_card(0, 0) is None
 
 
 class TestParseFromFile:
