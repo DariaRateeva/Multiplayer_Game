@@ -199,14 +199,18 @@ class GameManager:
         }
 
     async def flip(self, player_id: str, row: int, column: int) -> Dict[str, Any]:
-        """Flip card and return JSON response."""
         try:
+            # Perform the flip, which includes calls to cleanup previous matches
             await flip(self.board, player_id, row, column)
+
+            # Immediately check if the game is over after applying flip and cleanup
+            game_over = self.is_game_over()
+
             return {
                 "ok": True,
                 "board": self._serialize_board(),
                 "scores": self.scores,
-                "game_over": self.is_game_over()
+                "game_over": game_over
             }
         except Exception as e:
             return {
@@ -244,10 +248,8 @@ class GameManager:
         return result
 
     def is_game_over(self) -> bool:
-        # Returns True if no cards remain on board
         for y in range(self.board.height):
             for x in range(self.board.width):
-                space = self.board.get_space(x, y)
-                if space.card is not None:
+                if self.board.get_space(x, y).card is not None:
                     return False
         return True
