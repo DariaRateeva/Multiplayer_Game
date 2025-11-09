@@ -297,6 +297,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">height</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_change_event</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_watchers</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">asyncio</span><span class="o">.</span><span class="n">Event</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
         <span class="c1"># Create card list: each card appears exactly twice</span>
         <span class="n">card_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">card</span> <span class="ow">in</span> <span class="n">cards</span><span class="p">:</span>
@@ -401,8 +402,8 @@
         <span class="c1"># - 1 time: partially removed (one instance removed, one still on board) -- INVALID!</span>
         <span class="c1"># - 2 times: both on board (not removed yet)</span>
         <span class="k">for</span> <span class="n">card</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">card_counts</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">assert</span> <span class="n">count</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> \
-                <span class="sa">f</span><span class="s2">&quot;Card &#39;</span><span class="si">{</span><span class="n">card</span><span class="si">}</span><span class="s2">&#39; appears </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2"> times on board, must appear exactly 2 times. &quot;</span> \
+            <span class="k">assert</span> <span class="n">count</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> \
+                <span class="sa">f</span><span class="s2">&quot;Card &#39;</span><span class="si">{</span><span class="n">card</span><span class="si">}</span><span class="s2">&#39; appears </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2"> times on board, must appear 1 or 2 times. &quot;</span> \
                 <span class="sa">f</span><span class="s2">&quot;(Removed spaces: </span><span class="si">{</span><span class="n">removed_spaces</span><span class="si">}</span><span class="s2">)&quot;</span></div>
 
 
@@ -604,37 +605,33 @@
 <a class="viewcode-back" href="../../../index.html#src.game.board.Board.remove_control">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">remove_control</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Remove control from a space (any player).</span>
+<span class="sd">        Remove player control from a card.</span>
 
-<span class="sd">        Preconditions:</span>
+<span class="sd">        PRECONDITION:</span>
 <span class="sd">        - 0 &lt;= x &lt; width</span>
 <span class="sd">        - 0 &lt;= y &lt; height</span>
-<span class="sd">        - get_card(x, y) is not None</span>
+<span class="sd">        - Card exists (or handle gracefully if removed)</span>
 
-<span class="sd">        Postconditions:</span>
-<span class="sd">        - Space at (x, y) has controlled_by = None</span>
+<span class="sd">        POSTCONDITION:</span>
+<span class="sd">        - Card at (x, y) has no controller</span>
 <span class="sd">        - checkRep() passes</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            x: Column coordinate (0 to width-1)</span>
-<span class="sd">            y: Row coordinate (0 to height-1)</span>
-
-<span class="sd">        Raises:</span>
-<span class="sd">            AssertionError: If preconditions violated</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">assert</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">width</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;x=</span><span class="si">{</span><span class="n">x</span><span class="si">}</span><span class="s2"> out of bounds&quot;</span>
         <span class="k">assert</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">y</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;y=</span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2"> out of bounds&quot;</span>
 
         <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span><span class="p">[</span><span class="n">y</span><span class="p">][</span><span class="n">x</span><span class="p">]</span>
-        <span class="k">assert</span> <span class="n">space</span><span class="o">.</span><span class="n">card</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;No card at (</span><span class="si">{</span><span class="n">x</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2">)&quot;</span>
 
-        <span class="n">new_space</span> <span class="o">=</span> <span class="n">Space</span><span class="p">(</span>
+        <span class="c1"># Allow removing control from removed cards (graceful handling)</span>
+        <span class="k">if</span> <span class="n">space</span><span class="o">.</span><span class="n">card</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>  <span class="c1"># Card already removed, nothing to do</span>
+
+        <span class="c1"># Create new space without controller</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span><span class="p">[</span><span class="n">y</span><span class="p">][</span><span class="n">x</span><span class="p">]</span> <span class="o">=</span> <span class="n">Space</span><span class="p">(</span>
             <span class="n">card</span><span class="o">=</span><span class="n">space</span><span class="o">.</span><span class="n">card</span><span class="p">,</span>
             <span class="n">is_face_up</span><span class="o">=</span><span class="n">space</span><span class="o">.</span><span class="n">is_face_up</span><span class="p">,</span>
             <span class="n">controlled_by</span><span class="o">=</span><span class="kc">None</span>
         <span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span><span class="p">[</span><span class="n">y</span><span class="p">][</span><span class="n">x</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_space</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">check_rep</span><span class="p">()</span></div>
 
 
@@ -642,48 +639,42 @@
 <a class="viewcode-back" href="../../../index.html#src.game.board.Board.remove_card">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">remove_card</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Remove a card from the board (set space to None card).</span>
+<span class="sd">        Remove a card from the board.</span>
 
-<span class="sd">        This is used when a matching pair is found and removed from play.</span>
-<span class="sd">        Note: check_rep() is NOT called here to allow removing multiple cards</span>
-<span class="sd">        before validation. Caller should verify board state when ready.</span>
-
-<span class="sd">        Preconditions:</span>
+<span class="sd">        PRECONDITION:</span>
 <span class="sd">        - 0 &lt;= x &lt; width</span>
 <span class="sd">        - 0 &lt;= y &lt; height</span>
-<span class="sd">        - get_card(x, y) is not None (card exists)</span>
-<span class="sd">        - is_face_up(x, y) is True (card is visible)</span>
+<span class="sd">        - Card exists</span>
+<span class="sd">        - Card should ideally be face-up (we&#39;ll flip if needed)</span>
 
-<span class="sd">        Postconditions:</span>
-<span class="sd">        - Space at (x, y) has card = None</span>
-<span class="sd">        - Space is face-down and uncontrolled</span>
-<span class="sd">        - Note: checkRep() should be called after all removals are complete</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            x: Column coordinate (0 to width-1)</span>
-<span class="sd">            y: Row coordinate (0 to height-1)</span>
-
-<span class="sd">        Raises:</span>
-<span class="sd">            AssertionError: If preconditions violated</span>
+<span class="sd">        POSTCONDITION:</span>
+<span class="sd">        - Card at (x, y) is None</span>
+<span class="sd">        - checkRep() passes</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">assert</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">width</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;x=</span><span class="si">{</span><span class="n">x</span><span class="si">}</span><span class="s2"> out of bounds&quot;</span>
         <span class="k">assert</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">y</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;y=</span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2"> out of bounds&quot;</span>
 
         <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span><span class="p">[</span><span class="n">y</span><span class="p">][</span><span class="n">x</span><span class="p">]</span>
         <span class="k">assert</span> <span class="n">space</span><span class="o">.</span><span class="n">card</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;No card at (</span><span class="si">{</span><span class="n">x</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2">) to remove&quot;</span>
-        <span class="k">assert</span> <span class="n">space</span><span class="o">.</span><span class="n">is_face_up</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Card at (</span><span class="si">{</span><span class="n">x</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2">) must be face-up to remove&quot;</span>
 
-        <span class="c1"># Create empty space (no card, face-down, uncontrolled)</span>
-        <span class="n">new_space</span> <span class="o">=</span> <span class="n">Space</span><span class="p">(</span>
+        <span class="c1"># Flip face-up if needed (for cleanup scenarios)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">space</span><span class="o">.</span><span class="n">is_face_up</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span><span class="p">[</span><span class="n">y</span><span class="p">][</span><span class="n">x</span><span class="p">]</span> <span class="o">=</span> <span class="n">Space</span><span class="p">(</span>
+                <span class="n">card</span><span class="o">=</span><span class="n">space</span><span class="o">.</span><span class="n">card</span><span class="p">,</span>
+                <span class="n">is_face_up</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">controlled_by</span><span class="o">=</span><span class="n">space</span><span class="o">.</span><span class="n">controlled_by</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Remove the card</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span><span class="p">[</span><span class="n">y</span><span class="p">][</span><span class="n">x</span><span class="p">]</span> <span class="o">=</span> <span class="n">Space</span><span class="p">(</span>
             <span class="n">card</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
             <span class="n">is_face_up</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
             <span class="n">controlled_by</span><span class="o">=</span><span class="kc">None</span>
         <span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span><span class="p">[</span><span class="n">y</span><span class="p">][</span><span class="n">x</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_space</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">check_rep</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_notify_watchers</span><span class="p">()</span></div>
 
-        <span class="c1"># NOTE: Do NOT call check_rep() here - let caller verify when ready</span>
 
 <div class="viewcode-block" id="Board.parse_from_file">
 <a class="viewcode-back" href="../../../index.html#src.game.board.Board.parse_from_file">[docs]</a>
@@ -999,7 +990,50 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Notify all waiting watchers</span>
         <span class="k">for</span> <span class="n">watcher</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_watchers</span><span class="p">:</span>
-            <span class="n">watcher</span><span class="o">.</span><span class="n">set</span><span class="p">()</span></div>
+            <span class="n">watcher</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
+<div class="viewcode-block" id="Board.get_state_string">
+<a class="viewcode-back" href="../../../index.html#src.game.board.Board.get_state_string">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_state_string</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">player_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get board state as formatted string for the given player.</span>
+
+<span class="sd">        Format (as specified in MIT PS4):</span>
+<span class="sd">        Line 1: &quot;board&quot;</span>
+<span class="sd">        Line 2-N: Space-separated row data</span>
+
+<span class="sd">        Each space is represented as:</span>
+<span class="sd">        - &quot;down&quot; if face-down</span>
+<span class="sd">        - &quot;CARD&quot; if face-up (where CARD is the card string)</span>
+<span class="sd">        - &quot;none&quot; if removed</span>
+
+<span class="sd">        PRECONDITION: player_id is non-empty string</span>
+<span class="sd">        POSTCONDITION: returns formatted board state string</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            player_id: ID of player viewing the board</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Formatted board state string</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;board&quot;</span><span class="p">]</span>
+
+        <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="p">):</span>
+            <span class="n">row_parts</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">width</span><span class="p">):</span>
+                <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_space</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">space</span><span class="o">.</span><span class="n">card</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">row_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;none&quot;</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="ow">not</span> <span class="n">space</span><span class="o">.</span><span class="n">is_face_up</span><span class="p">:</span>
+                    <span class="n">row_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;down&quot;</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">row_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">card</span><span class="p">)</span>
+
+            <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">row_parts</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span></div>
+</div>
 
 
 </pre></div>

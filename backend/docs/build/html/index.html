@@ -478,54 +478,28 @@ and can be controlled by a player.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="src.game.board.Board.remove_control">
 <span class="sig-name descname"><span class="pre">remove_control</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/src/game/board.html#Board.remove_control"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.game.board.Board.remove_control" title="Link to this definition">¶</a></dt>
-<dd><p>Remove control from a space (any player).</p>
-<p>Preconditions:
+<dd><p>Remove player control from a card.</p>
+<p>PRECONDITION:
 - 0 &lt;= x &lt; width
 - 0 &lt;= y &lt; height
-- get_card(x, y) is not None</p>
-<p>Postconditions:
-- Space at (x, y) has controlled_by = None
+- Card exists (or handle gracefully if removed)</p>
+<p>POSTCONDITION:
+- Card at (x, y) has no controller
 - checkRep() passes</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>x</strong> – Column coordinate (0 to width-1)</p></li>
-<li><p><strong>y</strong> – Row coordinate (0 to height-1)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>AssertionError</strong> – If preconditions violated</p>
-</dd>
-</dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="src.game.board.Board.remove_card">
 <span class="sig-name descname"><span class="pre">remove_card</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/src/game/board.html#Board.remove_card"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.game.board.Board.remove_card" title="Link to this definition">¶</a></dt>
-<dd><p>Remove a card from the board (set space to None card).</p>
-<p>This is used when a matching pair is found and removed from play.
-Note: check_rep() is NOT called here to allow removing multiple cards
-before validation. Caller should verify board state when ready.</p>
-<p>Preconditions:
+<dd><p>Remove a card from the board.</p>
+<p>PRECONDITION:
 - 0 &lt;= x &lt; width
 - 0 &lt;= y &lt; height
-- get_card(x, y) is not None (card exists)
-- is_face_up(x, y) is True (card is visible)</p>
-<p>Postconditions:
-- Space at (x, y) has card = None
-- Space is face-down and uncontrolled
-- Note: checkRep() should be called after all removals are complete</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>x</strong> – Column coordinate (0 to width-1)</p></li>
-<li><p><strong>y</strong> – Row coordinate (0 to height-1)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>AssertionError</strong> – If preconditions violated</p>
-</dd>
-</dl>
+- Card exists
+- Card should ideally be face-up (we’ll flip if needed)</p>
+<p>POSTCONDITION:
+- Card at (x, y) is None
+- checkRep() passes</p>
 </dd></dl>
 
 <dl class="py method">
@@ -615,6 +589,29 @@ POSTCONDITION: Returns board state after a change occurs</p>
 <dl class="simple">
 <dt>Thread Safety:</dt><dd><p>Multiple watchers can wait concurrently.
 All watchers are notified when ANY change occurs.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.game.board.Board.get_state_string">
+<span class="sig-name descname"><span class="pre">get_state_string</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">player_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/src/game/board.html#Board.get_state_string"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.game.board.Board.get_state_string" title="Link to this definition">¶</a></dt>
+<dd><p>Get board state as formatted string for the given player.</p>
+<p>Format (as specified in MIT PS4):
+Line 1: “board”
+Line 2-N: Space-separated row data</p>
+<p>Each space is represented as:
+- “down” if face-down
+- “CARD” if face-up (where CARD is the card string)
+- “none” if removed</p>
+<p>PRECONDITION: player_id is non-empty string
+POSTCONDITION: returns formatted board state string</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>player_id</strong> – ID of player viewing the board</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Formatted board state string</p>
 </dd>
 </dl>
 </dd></dl>
@@ -724,6 +721,7 @@ All watchers are notified when ANY change occurs.</p>
 <li><a class="reference internal" href="#src.game.board.Board.wait_for_flip"><code class="docutils literal notranslate"><span class="pre">Board.wait_for_flip()</span></code></a></li>
 <li><a class="reference internal" href="#src.game.board.Board.map_cards"><code class="docutils literal notranslate"><span class="pre">Board.map_cards()</span></code></a></li>
 <li><a class="reference internal" href="#src.game.board.Board.wait_for_change"><code class="docutils literal notranslate"><span class="pre">Board.wait_for_change()</span></code></a></li>
+<li><a class="reference internal" href="#src.game.board.Board.get_state_string"><code class="docutils literal notranslate"><span class="pre">Board.get_state_string()</span></code></a></li>
 </ul>
 </li>
 </ul>
