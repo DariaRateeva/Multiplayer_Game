@@ -1,20 +1,17 @@
-"""Memory Scramble Game Server - Integrated with Board/GameManager"""
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Path, Request, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import sys
+import json
 
-# Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from game.board import Board
 from commands.commands import GameManager
 
 app = FastAPI(title="Memory Scramble API")
 
-# Enable CORS
+# Enable CORS for all origins in development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,74 +20,67 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Find public directory
-public_dir = Path(__file__).parent.parent.parent.parent / "public"
-
-# Store active games
+# Store all games here
 games = {}
+
+# Serve static frontend files (adjust path if needed)
+public_dir = Path(__file__).parent.parent.parent.parent / "public"
 
 @app.get("/")
 async def serve_game():
-    """Serve the main game page."""
     index_file = public_dir / "index.html"
     if index_file.exists():
         return FileResponse(str(index_file))
     return {"error": "Frontend not found"}
 
-# Mount static files
-if public_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(public_dir)), name="static")
-
 @app.post("/games/new")
-async def create_new_game():
-    """Create a new game with actual Board."""
-    cards = {"🎮", "🌈", "🎨", "⭐", "🎪", "🎭", "🎬", "🎸"}
-    board = Board(4, 4, cards)
-    game = GameManager(board)
+async def create_new_game(request: Request):
+    data = await request.json()
+    width = data.get("width", 4)
+    height = data.get("height", 4)
+    player_id = data.get("player_id", "player1")
 
+    num_pairs = (width * height) // 2
+    available_cards = ["🎮", "🌈", "🎨", "⭐", "🎪", "🎭", "🎬", "🎸", "⚽", "🏀", "🎲", "🎯"]
+    cards = set(available_cards[:num_pairs])
+
+    board = Board(width, height, cards)
+    game = GameManager(board)
     game_id = f"game_{len(games)}"
     games[game_id] = game
 
-    return {"success": True, "gameId": game_id}
-
-@app.get("/look/{player_id}")
-async def look(player_id: str):
-    """Get board state using GameManager."""
-    # Use first game for now (single player)
-    if games:
-        game = list(games.values())[0]
-        state = await game.look(player_id)
-        return state
-
-    # Fallback for no game
-    return {"ok": False, "error": "No active game"}
-
-
-@app.post("/flip/{player_id}")
-async def flip_card(player_id: str, x: int, y: int):
-    """Flip a card and return its state."""
-    if not games:
-        return {"ok": False, "message": "No active game"}
-
-    game = list(games.values())[0]
-
-    # Get board state BEFORE flip to see what card we're flipping
-    board_before = await game.look(player_id)
-
-    # Perform the flip
-    flip_result = await game.flip(player_id, y, x)  # NOTE: y,x order for row,col
-
-    # Get updated board state AFTER flip
-    board_after = await game.look(player_id)
-
-    # Return the flipped card's info
+    state = await game.look(player_id)
     return {
-        **flip_result,
-        "board": board_after.get("board"),
-        "scores": board_after.get("scores", {})
+        "ok": True,
+        "game_id": game_id,
+        "board": state.get("board", []),
+        "scores": state.get("scores", {})
     }
 
+@app.post("/games/{game_id}/flip")
+async def flip_card(game_id: str, request: Request):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
 
-@app.get("/api/health")
-async def health():
-    return {"status": "healthy", "games": len(games)}
+    game = games[game_id]
+    data = await request.json()
+    player_id = data.get("player_id")
+    row = data.get("row")
+    column = data.get("column")
+
+    if player_id is None or row is None or column is None:
+        raise HTTPException(status_code=400, detail="Missing parameters")
+    try:
+        result = await game.flip(player_id, row, column)
+        return result
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+@app.get("/games/{game_id}/look")
+async def look(game_id: str, player_id: str):
+    if game_id not in games:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    game = games[game_id]
+    result = await game.look(player_id)
+    return result

@@ -204,7 +204,9 @@ class GameManager:
             await flip(self.board, player_id, row, column)
             return {
                 "ok": True,
-                "board": self._serialize_board()
+                "board": self._serialize_board(),
+                "scores": self.scores,
+                "game_over": self.is_game_over()
             }
         except Exception as e:
             return {
@@ -240,3 +242,12 @@ class GameManager:
                 })
             result.append(row)
         return result
+
+    def is_game_over(self) -> bool:
+        # Returns True if no cards remain on board
+        for y in range(self.board.height):
+            for x in range(self.board.width):
+                space = self.board.get_space(x, y)
+                if space.card is not None:
+                    return False
+        return True
