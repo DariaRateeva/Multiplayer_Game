@@ -6,7 +6,6 @@ from typing import Dict, Optional, Callable, Any
 import asyncio
 from src.game.board import Board
 
-
 # ==================== PLAYER STATE ====================
 
 class PlayerState:
@@ -32,9 +31,7 @@ class PlayerState:
         self.first_card = None
         self.second_card = None
 
-
 _player_states: Dict[tuple, PlayerState] = {}
-
 
 def _get_player_state(board: Board, player_id: str) -> PlayerState:
     key = (id(board), player_id)
@@ -42,18 +39,16 @@ def _get_player_state(board: Board, player_id: str) -> PlayerState:
         _player_states[key] = PlayerState()
     return _player_states[key]
 
-
 # ==================== STANDALONE FUNCTIONS ====================
 
 async def look(board: Board, player_id: str) -> str:
     return board.get_state_string(player_id)
 
-
 async def flip(board: Board, player_id: str, row: int, column: int) -> str:
     """Flips card following MIT PS4 rules."""
     player_state = _get_player_state(board, player_id)
 
-    # RULE 3: Cleanup if we have two cards
+    # RULE 3: Cleanup current player's previous move if they have two cards
     if player_state.has_two_cards():
         await _cleanup_previous_move(board, player_state)
 
@@ -79,31 +74,36 @@ async def flip(board: Board, player_id: str, row: int, column: int) -> str:
     else:
         raise RuntimeError("Invalid state")
 
-
 async def _flip_first_card(board: Board, player_id: str, player_state: PlayerState,
                            x: int, y: int, space) -> str:
-    """RULE 1."""
-    # RULE 1-D: Block if controlled by another
+    """RULE 1: First card flip."""
+
+    # RULE 1-D: Block if controlled by another player
     while space.controlled_by and space.controlled_by != player_id:
         await asyncio.sleep(0.01)
         space = board.get_space(x, y)
+
         # Check if card was removed while waiting
         if space.card is None:
             raise ValueError(f"Card was removed while waiting")
+
+    # ✅ Cleanup other players' cards AFTER we know this card is available
+    # This prevents flipping down the card we're about to control (Rule 1-C)
+    await _cleanup_all_other_players_except_card(board, player_id, x, y)
 
     # RULE 1-B: Flip if face-down
     if not space.is_face_up:
         board.flip_card(x, y)
 
+    # RULE 1-C: Take control (card might already be face-up)
     board.set_control(x, y, player_id)
     player_state.first_card = (x, y, board.get_card(x, y))
-
     return board.get_state_string(player_id)
-
 
 async def _flip_second_card(board: Board, player_id: str, player_state: PlayerState,
                             x: int, y: int, space) -> str:
-    """RULE 2."""
+    """RULE 2: Second card flip."""
+
     # RULE 2-B: Controlled → FAIL
     if space.controlled_by is not None:
         x1, y1, _ = player_state.first_card
@@ -127,9 +127,8 @@ async def _flip_second_card(board: Board, player_id: str, player_state: PlayerSt
 
     return board.get_state_string(player_id)
 
-
 async def _cleanup_previous_move(board: Board, player_state: PlayerState):
-    """RULE 3: Cleanup."""
+    """RULE 3: Cleanup current player's previous move."""
     if not player_state.has_two_cards():
         return
 
@@ -145,7 +144,7 @@ async def _cleanup_previous_move(board: Board, player_state: PlayerState):
         return
 
     if player_state.cards_match():
-        # RULE 3-A: Remove matched
+        # RULE 3-A: Remove matched cards
         if space1.card is not None:
             if not space1.is_face_up:
                 board.flip_card(x1, y1)
@@ -160,7 +159,7 @@ async def _cleanup_previous_move(board: Board, player_state: PlayerState):
                 board.remove_control(x2, y2)
             board.remove_card(x2, y2)
     else:
-        # RULE 3-B: Flip down unmatched
+        # RULE 3-B: Flip down unmatched cards
         if space1.card and space1.is_face_up and not space1.controlled_by:
             board.flip_card(x1, y1)
         if space2.card and space2.is_face_up and not space2.controlled_by:
@@ -168,16 +167,47 @@ async def _cleanup_previous_move(board: Board, player_state: PlayerState):
 
     player_state.reset()
 
+async def _cleanup_all_other_players_except_card(board: Board, current_player_id: str,
+                                                   exclude_x: int, exclude_y: int):
+    """
+    RULE 3-B: When ANY player starts a new first card,
+    flip down all OTHER players' previous non-matching face-up uncontrolled cards,
+    EXCEPT the card that the current player is about to control.
+    """
+    board_id = id(board)
+
+    for (bid, pid), state in list(_player_states.items()):
+        if bid != board_id or pid == current_player_id:
+            continue
+
+        # Only cleanup players who have two non-matching cards
+        if state.has_two_cards() and not state.cards_match():
+            x1, y1, _ = state.first_card
+            x2, y2, _ = state.second_card
+
+            space1 = board.get_space(x1, y1)
+            space2 = board.get_space(x2, y2)
+
+            # RULE 3-B: Flip down if face-up and not controlled
+            # BUT: Don't flip down the card we're about to control!
+            if space1.card and space1.is_face_up and not space1.controlled_by:
+                if not (x1 == exclude_x and y1 == exclude_y):
+                    board.flip_card(x1, y1)
+
+            if space2.card and space2.is_face_up and not space2.controlled_by:
+                if not (x2 == exclude_x and y2 == exclude_y):
+                    board.flip_card(x2, y2)
+
+            # Clear their state
+            state.reset()
 
 async def map(board: Board, player_id: str, f: Callable[[str], str]) -> str:
     await board.map_cards(player_id, f)
     return board.get_state_string(player_id)
 
-
 async def watch(board: Board, player_id: str) -> str:
     await board.wait_for_change()
     return board.get_state_string(player_id)
-
 
 # ==================== GAMEMANAGER CLASS ====================
 
@@ -186,7 +216,7 @@ class GameManager:
 
     def __init__(self, board: Board) -> None:
         self.board = board
-        self._game_state = {}  # Track player states
+        self._game_state = {}
         self.scores: Dict[str, int] = {}
 
     async def look(self, player_id: str) -> Dict[str, Any]:
@@ -205,6 +235,8 @@ class GameManager:
             game_over = self._is_game_over()
             return {
                 "ok": True,
+                "width": self.board.width,
+                "height": self.board.height,
                 "board": self._serialize_board(player_id),
                 "scores": self.scores,
                 "game_over": game_over,

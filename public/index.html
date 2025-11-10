@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memory Scramble - MIT 6.102 Lab 3</title>
+    <title>Memory Scramble - Multiplayer Game</title>
     <style>
         * {
             margin: 0;
@@ -24,9 +24,9 @@
         .container {
             background: white;
             border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 800px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 900px;
             width: 100%;
         }
 
@@ -41,426 +41,395 @@
             text-align: center;
             color: #666;
             margin-bottom: 30px;
-            font-size: 1em;
         }
 
-        .controls {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 30px;
-            flex-wrap: wrap;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .input-group {
+        .setup {
             display: flex;
             gap: 10px;
-            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
-        label {
-            font-weight: 600;
-            color: #333;
-        }
-
-        input[type="text"],
-        input[type="number"] {
-            padding: 10px 15px;
+        input {
+            padding: 12px 20px;
             border: 2px solid #ddd;
             border-radius: 8px;
-            font-size: 1em;
-            transition: border-color 0.3s;
+            font-size: 16px;
         }
 
-        input[type="text"]:focus,
-        input[type="number"]:focus {
+        input[type="text"] {
+            flex: 2;
+            min-width: 150px;
+        }
+
+        input[type="number"] {
+            width: 80px;
+        }
+
+        input:focus {
             outline: none;
             border-color: #667eea;
         }
 
         button {
-            padding: 12px 24px;
+            padding: 12px 30px;
             background: #667eea;
             color: white;
             border: none;
             border-radius: 8px;
-            font-size: 1em;
-            font-weight: 600;
+            font-size: 16px;
             cursor: pointer;
+            font-weight: bold;
             transition: all 0.3s;
         }
 
         button:hover {
-            background: #5568d3;
+            background: #764ba2;
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        button:active {
-            transform: translateY(0);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
 
         .info {
             display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
+            justify-content: space-around;
+            margin: 20px 0;
             padding: 15px;
-            background: #f8f9fa;
+            background: #f5f5f5;
             border-radius: 10px;
         }
 
-        .info div {
-            font-weight: 600;
-            color: #333;
+        .info-item {
+            text-align: center;
         }
 
-        .info span {
+        .info-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .info-value {
+            font-size: 20px;
+            font-weight: bold;
             color: #667eea;
-            font-size: 1.2em;
         }
 
-        #game-board {
+        .board {
             display: grid;
             gap: 10px;
-            margin-bottom: 20px;
-            justify-content: center;
-        }
-
-        .board-row {
-            display: flex;
-            gap: 10px;
+            margin: 20px auto;
+            max-width: 600px;
         }
 
         .card {
-            width: 80px;
-            height: 80px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 1.5em;
-            font-weight: bold;
+            aspect-ratio: 1;
+            min-width: 80px;
+            min-height: 80px;
             border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
             cursor: pointer;
-            transition: all 0.3s;
-            user-select: none;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s;
+            font-weight: bold;
+            border: 3px solid transparent;
         }
 
-        /* Face-down cards (default) */
-        .card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        .card:hover:not(.none) {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .card.down {
+            background: #4285f4;
             color: white;
         }
 
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
-        }
-
-        /* Face-up but NOT matched (temporary) - Yellow */
-        .card.face-up {
-            background: linear-gradient(135deg, #FFD93D 0%, #FFA500 100%);
+        .card.up {
+            background: #fbbc04;
             color: #333;
-            border: 3px solid #FF8C00;
-            animation: flipIn 0.3s ease-out;
         }
 
-        /* Matched cards (controlled by player) - Green */
-        .card.matched {
-            background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+        .card.my {
+            background: #ff6b6b;
             color: white;
-            border: 3px solid #1B5E20;
+            border-color: #c92a2a;
+        }
+
+        .card.none {
+            background: #e0e0e0;
             cursor: not-allowed;
-            animation: matchPulse 0.5s ease-out;
-        }
-
-        /* Removed cards (matched pair removed from board) */
-        .card.removed {
-            background: transparent;
-            border: 2px dashed #ddd;
-            color: #ddd;
-            cursor: not-allowed;
-            pointer-events: none;
-        }
-
-        @keyframes flipIn {
-            from {
-                transform: rotateY(90deg);
-            }
-            to {
-                transform: rotateY(0deg);
-            }
-        }
-
-        @keyframes matchPulse {
-            0%, 100% {
-                transform: scale(1);
-            }
-            50% {
-                transform: scale(1.1);
-            }
+            opacity: 0.3;
         }
 
         .status {
             text-align: center;
             padding: 15px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            margin-top: 20px;
-            font-weight: 600;
-            color: #333;
+            margin: 15px 0;
+            border-radius: 8px;
+            font-weight: bold;
+            display: none;
         }
 
-        .status.error {
-            background: #ffebee;
-            color: #c62828;
+        .status.show {
+            display: block;
         }
 
         .status.success {
-            background: #e8f5e9;
-            color: #2e7d32;
+            background: #d4edda;
+            color: #155724;
         }
 
-        .legend {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        #connection {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .connected {
+            background: #34a853;
+            color: white;
+        }
+
+        .disconnected {
+            background: #ea4335;
+            color: white;
+        }
+
+        .debug {
             margin-top: 20px;
-            font-size: 0.9em;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .legend-box {
-            width: 30px;
-            height: 30px;
-            border-radius: 5px;
-        }
-
-        .legend-box.face-down {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-
-        .legend-box.temporary {
-            background: linear-gradient(135deg, #FFD93D 0%, #FFA500 100%);
-            border: 2px solid #FF8C00;
-        }
-
-        .legend-box.matched {
-            background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
-            border: 2px solid #1B5E20;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            max-height: 150px;
+            overflow-y: auto;
+            display: none;
         }
     </style>
 </head>
 <body>
+    <div id="connection" class="disconnected">⚫ Disconnected</div>
+
     <div class="container">
         <h1>🎮 Memory Scramble</h1>
-        <p class="subtitle">MIT 6.102 Lab 3 - Multiplayer Memory Game</p>
+        <p class="subtitle">MIT 6.102 Lab 3 - Multiplayer</p>
 
-        <div class="controls">
-            <div class="input-group">
-                <label for="player-id">Player ID:</label>
-                <input type="text" id="player-id" value="player1" placeholder="Enter your ID">
-            </div>
-            <div class="input-group">
-                <label for="board-width">Width:</label>
-                <input type="number" id="board-width" value="4" min="2" max="10">
-            </div>
-            <div class="input-group">
-                <label for="board-height">Height:</label>
-                <input type="number" id="board-height" value="4" min="2" max="10">
-            </div>
-            <button onclick="newGame()">New Game</button>
+        <div class="setup">
+            <input type="text" id="playerId" placeholder="Enter your name">
+            <input type="number" id="width" placeholder="Width" value="4" min="2" max="6">
+            <input type="number" id="height" placeholder="Height" value="4" min="2" max="6">
+            <button onclick="startGame()">New Game</button>
             <button onclick="refreshBoard()">Refresh</button>
         </div>
 
         <div class="info">
-            <div>Player: <span id="current-player">player1</span></div>
-            <div>Score: <span id="score">0</span></div>
-            <div>Board: <span id="board-size">4x4</span></div>
-        </div>
-
-        <div id="game-board"></div>
-
-        <div class="legend">
-            <div class="legend-item">
-                <div class="legend-box face-down"></div>
-                <span>Face Down</span>
+            <div class="info-item">
+                <div class="info-label">Player</div>
+                <div class="info-value" id="player">-</div>
             </div>
-            <div class="legend-item">
-                <div class="legend-box temporary"></div>
-                <span>Flipped (Temporary)</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-box matched"></div>
-                <span>Matched Pair</span>
+            <div class="info-item">
+                <div class="info-label">Board Size</div>
+                <div class="info-value" id="size">-</div>
             </div>
         </div>
 
-        <div id="status" class="status">Click "New Game" to start playing!</div>
+        <div id="board" class="board"></div>
+        <div id="status" class="status"></div>
+
+        <div class="debug" id="debug"></div>
     </div>
 
     <script>
-        const API_URL = 'http://localhost:8000';
-        let currentGameId = null;
-        let playerId = 'player1';
+        let playerId = '';
+        let ws = null;
 
-        // Initialize
-        document.getElementById('player-id').addEventListener('change', (e) => {
-            playerId = e.target.value;
-            document.getElementById('current-player').textContent = playerId;
-        });
+        function log(msg) {
+            console.log(msg);
+            const debug = document.getElementById('debug');
+            debug.innerHTML = `${new Date().toLocaleTimeString()}: ${msg}<br>` + debug.innerHTML;
+        }
 
-        async function newGame() {
-            const width = parseInt(document.getElementById('board-width').value);
-            const height = parseInt(document.getElementById('board-height').value);
-            playerId = document.getElementById('player-id').value;
+        function connectWS() {
+            const wsUrl = `ws://${window.location.host}/ws`;
+            log(`Connecting to ${wsUrl}`);
 
             try {
-                const response = await fetch(`${API_URL}/games/new`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ width, height, player_id: playerId })
-});
+                ws = new WebSocket(wsUrl);
 
+                ws.onopen = () => {
+                    log('✅ WebSocket connected');
+                    document.getElementById('connection').textContent = '🟢 Live';
+                    document.getElementById('connection').className = 'connected';
+                };
 
+                ws.onmessage = (e) => {
+                    try {
+                        const data = JSON.parse(e.data);
+                        log('📨 Received update');
+                        if (data.type === 'board_update' && playerId) {
+                            renderBoard(data.data);
+                        }
+                    } catch (err) {
+                        log('❌ Parse error: ' + err.message);
+                    }
+                };
 
+                ws.onclose = () => {
+                    log('❌ WebSocket closed');
+                    document.getElementById('connection').textContent = '⚫ Offline';
+                    document.getElementById('connection').className = 'disconnected';
+                    setTimeout(connectWS, 3000);
+                };
+            } catch (err) {
+                log('❌ WebSocket error: ' + err.message);
+            }
+        }
+
+        async function startGame() {
+            playerId = document.getElementById('playerId').value.trim();
+            if (!playerId) {
+                showStatus('Please enter your name!', 'error');
+                return;
+            }
+
+            const width = parseInt(document.getElementById('width').value) || 4;
+            const height = parseInt(document.getElementById('height').value) || 4;
+
+            document.getElementById('player').textContent = playerId;
+            log(`🎮 Creating new ${width}x${height} game for ${playerId}`);
+
+            try {
+                const response = await fetch(`/api/newgame?playerId=${playerId}&width=${width}&height=${height}`, {
+                    method: 'POST'
+                });
                 const data = await response.json();
 
                 if (data.ok) {
-                    currentGameId = data.game_id;
-                    document.getElementById('board-size').textContent = `${width}x${height}`;
-                    showStatus('Game started! Find matching pairs!', 'success');
-                    renderBoard(data.board);
-                    updateScore(data.scores);
+                    showStatus(data.message || 'Game started!', 'success');
+                    renderBoard(data);
                 } else {
-                    showStatus('Error: ' + data.message, 'error');
+                    showStatus('Failed to start game', 'error');
                 }
-            } catch (error) {
-                showStatus('Failed to create game: ' + error.message, 'error');
+            } catch (err) {
+                log(`❌ Error: ${err.message}`);
+                showStatus('Error: ' + err.message, 'error');
             }
+        }
+
+        async function refreshBoard() {
+            if (!playerId) return;
+
+            try {
+                log(`📡 Fetching board for ${playerId}`);
+                const response = await fetch(`/api/look?playerId=${playerId}`);
+                const data = await response.json();
+                log(`✅ Got response`);
+                renderBoard(data);
+            } catch (err) {
+                log(`❌ Fetch error: ${err.message}`);
+                showStatus('Error: ' + err.message, 'error');
+            }
+        }
+
+        function renderBoard(data) {
+            log(`🎨 Rendering board`);
+            const boardDiv = document.getElementById('board');
+
+            const width = data.width || 4;
+            const height = data.height || 4;
+            const board = data.board || [];
+
+            log(`Board size: ${width}x${height}`);
+
+            document.getElementById('size').textContent = `${width}×${height}`;
+            boardDiv.style.gridTemplateColumns = `repeat(${width}, 1fr)`;
+            boardDiv.innerHTML = '';
+
+            for (let row = 0; row < height; row++) {
+                for (let col = 0; col < width; col++) {
+                    const cell = board[row] && board[row][col] ? board[row][col] : { state: 'down' };
+                    const card = document.createElement('div');
+                    card.className = `card ${cell.state || 'down'}`;
+                    card.dataset.row = row;
+                    card.dataset.col = col;
+
+                    // Display card content
+                    if (cell.state === 'none') {
+                        card.textContent = '';
+                    } else if (cell.state === 'down') {
+                        card.textContent = '?';
+                    } else {
+                        card.textContent = cell.card || '?';
+                    }
+
+                    // Add click handler
+                    if (cell.state !== 'none') {
+                        card.onclick = () => flipCard(row, col);
+                    }
+
+                    boardDiv.appendChild(card);
+                }
+            }
+
+            log(`✅ Rendered board`);
         }
 
         async function flipCard(row, col) {
-    if (!currentGameId) {
-        showStatus('Start a new game first!', 'error');
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_URL}/games/${currentGameId}/flip`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                player_id: playerId,
-                row: row,
-                column: col
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.ok) {
-            renderBoard(data.board);
-            updateScore(data.scores);
-            if (data.game_over) {
-                showStatus(`🎉 Congratulations, ${playerId}! You matched all pairs!`, 'success');
-            } else {
-                showStatus('Card flipped!', 'success');
+            if (!playerId) {
+                showStatus('Enter your name first!', 'error');
+                return;
             }
-        } else {
-            showStatus('Error: ' + data.message, 'error');
-        }
-    } catch (error) {
-        showStatus('Failed to flip card: ' + error.message, 'error');
-    }
-}
 
+            log(`🎯 Flipping card at (${row}, ${col})`);
 
-       async function refreshBoard() {
-    if (!currentGameId) {
-        showStatus('Start a new game first!', 'error');
-        return;
-    }
+            try {
+                const url = `/api/flip?playerId=${playerId}&row=${row}&column=${col}`;
+                log(`📤 POST ${url}`);
 
-    try {
-        const response = await fetch(`${API_URL}/games/${currentGameId}/look?player_id=${playerId}`);
-        const data = await response.json();
+                const response = await fetch(url, { method: 'POST' });
+                const data = await response.json();
 
-        if (data.ok) {
-            renderBoard(data.board);
-            updateScore(data.scores);
-            if (data.game_over) {
-                showStatus(`🎉 Congratulations, ${playerId}! You matched all pairs!`, 'success');
-            } else {
-                showStatus('Card flipped!', 'success');
+                log(`✅ Flip response: ${data.ok ? 'success' : 'fail'}`);
+
+                if (data.ok) {
+                    showStatus(data.message || 'Card flipped!', 'success');
+                    renderBoard(data);
+                    setTimeout(refreshBoard, 200);
+                } else {
+                    showStatus(data.message || 'Failed', 'error');
+                }
+            } catch (err) {
+                log(`❌ Flip error: ${err.message}`);
+                showStatus('Error: ' + err.message, 'error');
             }
-        } else {
-            showStatus('Error: ' + data.message, 'error');
-        }
-    } catch (error) {
-        showStatus('Refresh failed: ' + error.message, 'error');
-    }
-}
-
-        function renderBoard(boardData) {
-            const boardElement = document.getElementById('game-board');
-            boardElement.innerHTML = '';
-
-            boardData.forEach((row, y) => {
-                const rowDiv = document.createElement('div');
-                rowDiv.className = 'board-row';
-
-                row.forEach((space, x) => {
-                    const card = document.createElement('div');
-                    card.className = 'card';
-
-                    // CRITICAL FIX: Check controlled_by for true matches
-                    if (space.card === null) {
-                        // Card was removed (matched pair removed from board)
-                        card.classList.add('removed');
-                        card.textContent = '✓';
-                    } else if (space.controlled_by !== null && space.controlled_by !== undefined) {
-                        // Card is MATCHED and controlled by a player (GREEN)
-                        card.classList.add('matched');
-                        card.textContent = space.card;
-                    } else if (space.is_face_up) {
-                        // Card is face-up but NOT matched (temporary - YELLOW)
-                        card.classList.add('face-up');
-                        card.textContent = space.card;
-                    } else {
-                        // Card is face-down (BLUE)
-                        card.textContent = '?';
-                    }
-
-                    // Click handler - only allow clicks on non-matched, non-removed cards
-                    if (!card.classList.contains('matched') && !card.classList.contains('removed')) {
-                        card.addEventListener('click', () => flipCard(y, x));
-                    }
-
-                    rowDiv.appendChild(card);
-                });
-
-                boardElement.appendChild(rowDiv);
-            });
         }
 
-        function updateScore(scores) {
-            const playerScore = scores[playerId] || 0;
-            document.getElementById('score').textContent = playerScore;
+        function showStatus(msg, type) {
+            const status = document.getElementById('status');
+            status.textContent = msg;
+            status.className = `status ${type} show`;
+            setTimeout(() => status.classList.remove('show'), 3000);
         }
 
-        function showStatus(message, type = '') {
-            const statusElement = document.getElementById('status');
-            statusElement.textContent = message;
-            statusElement.className = 'status' + (type ? ' ' + type : '');
-        }
+        // Initialize
+        connectWS();
 
+        // Auto-refresh every 2 seconds if player is active
+        setInterval(() => {
+            if (playerId) refreshBoard();
+        }, 2000);
     </script>
 </body>
 </html>
