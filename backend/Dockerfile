@@ -7,13 +7,17 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 RUN apt-get update && apt-get install -y gcc && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
+# Copy requirements first
 COPY backend/pyproject.toml backend/
+
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir fastapi uvicorn python-multipart
+    pip install --no-cache-dir fastapi "uvicorn[standard]" python-multipart websockets
 
 # Copy backend code
 COPY backend/ backend/
+
+# Copy boards folder
+COPY boards/ boards/
 
 # Copy frontend (public folder)
 COPY public/ public/

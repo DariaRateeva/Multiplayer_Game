@@ -186,68 +186,71 @@ class GameManager:
 
     def __init__(self, board: Board) -> None:
         self.board = board
+        self._game_state = {}  # Track player states
         self.scores: Dict[str, int] = {}
 
     async def look(self, player_id: str) -> Dict[str, Any]:
-        """Get board state as JSON."""
+        """Get board state as JSON with correct state format."""
         return {
             "ok": True,
             "width": self.board.width,
             "height": self.board.height,
-            "board": self._serialize_board(),
+            "board": self._serialize_board(player_id),
             "scores": self.scores
         }
 
     async def flip(self, player_id: str, row: int, column: int) -> Dict[str, Any]:
         try:
-            # Perform the flip, which includes calls to cleanup previous matches
             await flip(self.board, player_id, row, column)
-
-            # Immediately check if the game is over after applying flip and cleanup
-            game_over = self.is_game_over()
-
+            game_over = self._is_game_over()
             return {
                 "ok": True,
-                "board": self._serialize_board(),
+                "board": self._serialize_board(player_id),
                 "scores": self.scores,
-                "game_over": game_over
+                "game_over": game_over,
+                "message": "Card flipped!"
             }
         except Exception as e:
-            return {
-                "ok": False,
-                "message": str(e)
-            }
+            return {"ok": False, "message": str(e)}
 
     async def watch(self, player_id: str) -> Dict[str, Any]:
         """Wait for board change and return new state."""
         try:
             await watch(self.board, player_id)
-            return {
-                "ok": True,
-                "board": self._serialize_board()
-            }
+            return {"ok": True, "board": self._serialize_board(player_id)}
         except Exception as e:
-            return {
-                "ok": False,
-                "message": str(e)
-            }
+            return {"ok": False, "message": str(e)}
 
-    def _serialize_board(self) -> list:
-        """Convert board to JSON format."""
+    def _serialize_board(self, player_id: str) -> list:
+        """
+        Convert board to JSON format with 'state' field.
+        States: 'down', 'up', 'my', 'none'
+        """
         result = []
         for y in range(self.board.height):
             row = []
             for x in range(self.board.width):
                 space = self.board.get_space(x, y)
+
+                # Determine state
+                if space.card is None:
+                    state = "none"
+                elif not space.is_face_up:
+                    state = "down"
+                elif space.controlled_by == player_id:
+                    state = "my"
+                else:
+                    state = "up"
+
                 row.append({
+                    "state": state,
                     "card": space.card,
-                    "is_face_up": space.is_face_up,
                     "controlled_by": space.controlled_by
                 })
             result.append(row)
         return result
 
-    def is_game_over(self) -> bool:
+    def _is_game_over(self) -> bool:
         for y in range(self.board.height):
             for x in range(self.board.width):
                 if self.board.get_space(x, y).card is not None:

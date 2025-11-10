@@ -554,6 +554,14 @@ class Board:
 
         return "\n".join(lines)
 
+    # In board.py - add this class method
+    @classmethod
+    def create_simple_board(cls, width: int, height: int) -> "Board":
+        """Create a simple board with letter cards A, B, C, etc."""
+        num_cards = (width * height) // 2
+        cards = set([chr(65 + i) for i in range(num_cards)])  # A, B, C, ...
+        return cls(width, height, cards)
+
     async def wait_for_flip(self, x: int, y: int, player_id: str) -> str:
         """
         Async flip that waits if another player controls the card.
