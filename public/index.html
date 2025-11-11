@@ -375,9 +375,10 @@
                     }
 
                     // Add click handler
-                    if (cell.state !== 'none') {
-                        card.onclick = () => flipCard(row, col);
-                    }
+                    // if (cell.state !== 'none') {
+                    //     card.onclick = () => flipCard(row, col);
+                    // }
+                    card.onclick = () => flipCard(row, col);
 
                     boardDiv.appendChild(card);
                 }
